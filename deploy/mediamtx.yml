@@ -1,0 +1,41 @@
+logLevel: info
+logDestinations: [stdout]
+readTimeout: 10s
+writeTimeout: 10s
+
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+  - user: any
+    pass:
+    ips: [127.0.0.1, "::1", 172.31.250.0/24]
+    permissions:
+      - action: api
+      - action: metrics
+
+rtsp: true
+rtspAddress: :8554
+rtspTransports: [tcp]
+
+hls: true
+hlsAddress: :8888
+hlsAlwaysRemux: false
+hlsVariant: lowLatency
+hlsSegmentCount: 5
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+
+api: true
+apiAddress: 127.0.0.1:9997
+
+metrics: true
+metricsAddress: :9998
+
+paths:
+  all_others:

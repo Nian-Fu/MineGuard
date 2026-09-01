@@ -1,0 +1,16 @@
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+
+COPY pyproject.toml ./
+COPY app ./app
+RUN pip install --no-cache-dir ".[edge]"
+
+RUN addgroup --system mineguard && adduser --system --ingroup mineguard mineguard \
+    && mkdir -p /var/lib/mineguard \
+    && chown -R mineguard:mineguard /var/lib/mineguard
+USER mineguard
+
+ENTRYPOINT ["mineguard-edge"]
+CMD ["--config", "/etc/mineguard/edge-worker.json"]

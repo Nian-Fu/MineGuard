@@ -1,0 +1,25 @@
+[Unit]
+Description=MineGuard encrypted PostgreSQL backup
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+User=mineguard-backup
+Group=mineguard-backup
+EnvironmentFile=/etc/mineguard/backup.env
+ExecStart=/bin/sh /opt/mineguard/deploy/backup/backup-postgres.sh
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=2h
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/mineguard
+ReadWritePaths=/var/backups/mineguard
+
+[Install]
+WantedBy=multi-user.target

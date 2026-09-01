@@ -1,0 +1,38 @@
+{
+  "central_url": "https://mineguard.internal.example",
+  "node_code": "edge-shaft-01",
+  "software_version": "edge-worker-0.1.0",
+  "triton_url": "triton.internal.example:8000",
+  "model_manifest": "models/mine-detector/manifest.json",
+  "model_root": "models",
+  "outbox_path": "/var/lib/mineguard/event-outbox.db",
+  "outbox_maximum_items": 100000,
+  "outbox_maximum_payload_bytes": 65536,
+  "resolved_dead_letter_retention_days": 90,
+  "event_snapshots_enabled": false,
+  "snapshot_spool_path": "/var/lib/mineguard/event-snapshots",
+  "snapshot_jpeg_quality": 85,
+  "snapshot_maximum_bytes": 8388608,
+  "heartbeat_seconds": 15,
+  "stream_stall_timeout_seconds": 60,
+  "person_classes": ["person"],
+  "head_classes": ["head"],
+  "helmet_classes": ["helmet", "hardhat", "hard_hat"],
+  "cameras": [
+    {
+      "camera_id": 1,
+      "code": "CAM-001",
+      "area": "主井口",
+      "stream_url": "rtsp://camera-gateway.internal/cam001",
+      "counting_authority": true,
+      "intrusion_polygon": [[0.55, 0.25], [0.98, 0.25], [0.98, 0.98], [0.55, 0.98]],
+      "crowding_polygon": [[0.05, 0.2], [0.95, 0.2], [0.95, 0.98], [0.05, 0.98]],
+      "crowding_threshold": 8,
+      "intrusion_dwell_seconds": 2.0,
+      "helmet_dwell_seconds": 1.0,
+      "face_recognition_enabled": false,
+      "face_probe_interval_seconds": 5.0,
+      "face_event_cooldown_seconds": 60.0
+    }
+  ]
+}

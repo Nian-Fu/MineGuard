@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mineguard-rl-scheduler"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "gymnasium>=1.0,<2",
+  "numpy>=2.0,<3",
+  "stable-baselines3>=2.4,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mineguard_rl"]

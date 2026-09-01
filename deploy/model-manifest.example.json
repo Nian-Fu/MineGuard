@@ -1,0 +1,14 @@
+{
+  "model_name": "mine_detector",
+  "algorithm_type": "object_detection",
+  "model_version": "mine-detector-1.0.0",
+  "artifact": "mine-detector/model.plan",
+  "sha256": "replace-with-64-lowercase-hexadecimal-characters-after-export",
+  "runtime": "tensorrt-10",
+  "license_id": "Apache-2.0",
+  "input_name": "images",
+  "output_name": "detections",
+  "input_width": 960,
+  "input_height": 960,
+  "class_names": ["person", "helmet", "head"]
+}

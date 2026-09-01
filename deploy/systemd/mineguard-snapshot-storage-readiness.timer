@@ -1,0 +1,12 @@
+[Unit]
+Description=Verify MineGuard snapshot storage controls every fifteen minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60s
+Persistent=true
+Unit=mineguard-snapshot-storage-readiness.service
+
+[Install]
+WantedBy=timers.target

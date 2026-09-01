@@ -1,0 +1,25 @@
+name: "mine_detector"
+platform: "tensorrt_plan"
+max_batch_size: 16
+input [
+  {
+    name: "images"
+    data_type: TYPE_FP32
+    dims: [ 3, 960, 960 ]
+  }
+]
+output [
+  {
+    name: "detections"
+    data_type: TYPE_FP32
+    dims: [ -1, 6 ]
+  }
+]
+parameters {
+  key: "artifact_sha256"
+  value: { string_value: "replace-with-the-same-approved-sha256" }
+}
+dynamic_batching {
+  preferred_batch_size: [ 4, 8, 16 ]
+  max_queue_delay_microseconds: 8000
+}

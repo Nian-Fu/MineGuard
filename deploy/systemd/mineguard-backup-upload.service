@@ -1,0 +1,24 @@
+[Unit]
+Description=MineGuard off-site backup uploader
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=mineguard-backup
+Group=mineguard-backup
+EnvironmentFile=/etc/mineguard/backup.env
+ExecStart=/bin/sh /opt/mineguard/deploy/backup/upload-ready-backups.sh
+Restart=always
+RestartSec=10
+TimeoutStopSec=30s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/mineguard
+ReadWritePaths=/var/backups/mineguard
+
+[Install]
+WantedBy=multi-user.target

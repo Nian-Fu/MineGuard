@@ -1,0 +1,29 @@
+services:
+  edge-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.edge
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MINEGUARD_EDGE_KEY: ${MINEGUARD_EDGE_KEY:?Set the one-time edge node service key}
+    volumes:
+      - ${MINEGUARD_EDGE_CONFIG_DIR:?Set the edge configuration directory}:/etc/mineguard:ro
+      - edge_event_outbox:/var/lib/mineguard
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  edge_event_outbox:

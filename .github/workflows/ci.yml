@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: ruff check app tests migrations
+      - run: pytest --cov=app --cov-report=term-missing
+      - run: MINEGUARD_ENVIRONMENT=test MINEGUARD_DATABASE_URL=sqlite:///./migration_test.db python -m app.migrate
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: node --check ../tests/load/k6-console.js
+      - run: npm run typecheck
+      - run: npm run build
+
+  rl-environment:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: research/rl_scheduler
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: PYTHONPATH=. pytest -q
+
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+        env:
+          MINEGUARD_DB_PASSWORD: ci-database-password
+          MINEGUARD_DATABASE_URL: postgresql+psycopg://mineguard:ci-database-password@db:5432/mineguard
+          MINEGUARD_SECRET_KEY: ci-secret-key-at-least-thirty-two-characters
+          MINEGUARD_BOOTSTRAP_ADMIN_PASSWORD: CiAdminPassword123
+          MINEGUARD_CAMERA_URL_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          MINEGUARD_CAMERA_URL_PREVIOUS_KEYS: "{}"
+          MINEGUARD_FACE_TEMPLATE_PREVIOUS_KEYS: "{}"
+      - run: docker compose -f deploy/docker-compose.edge.yml config --quiet
+        env:
+          MINEGUARD_EDGE_KEY: mg_edge_ci-only-placeholder
+          MINEGUARD_EDGE_CONFIG_DIR: .
+      - run: >-
+          bash -n
+          deploy/backup/backup-postgres.sh
+          deploy/backup/upload-ready-backups.sh
+          deploy/backup/verify-restore.sh
+          deploy/pitr/verify-readiness.sh
+          deploy/release/verify-supply-chain-inputs.sh
+          deploy/snapshot-storage/verify-readiness.sh
+          frontend/validate-runtime-env.sh

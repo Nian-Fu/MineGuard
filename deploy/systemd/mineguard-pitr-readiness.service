@@ -1,0 +1,23 @@
+[Unit]
+Description=MineGuard PITR readiness verification
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=mineguard-backup
+Group=mineguard-backup
+EnvironmentFile=/etc/mineguard/pitr.env
+ExecStart=/bin/sh /opt/mineguard/deploy/pitr/verify-readiness.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

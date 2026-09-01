@@ -1,0 +1,12 @@
+[Unit]
+Description=Run MineGuard PITR readiness verification every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=mineguard-pitr-readiness.service
+
+[Install]
+WantedBy=timers.target
