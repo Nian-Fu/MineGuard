@@ -160,6 +160,8 @@ nav button.active::before { content: ''; position: absolute; width: 3px; height:
 .account-identity small { display: block; max-width: 210px; margin-top: 4px; color: #708078; font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrim { display: none; }
 
+.admin-role-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }.admin-role-grid article, .llm-config-panel { border: 1px solid var(--line); background: var(--surface); padding: 16px; border-radius: 6px; }.admin-role-grid h3 { margin: 10px 0 5px; font-size: 15px; }.admin-role-grid p { min-height: 40px; color: var(--muted); font-size: 12px; line-height: 1.55; }.admin-role-grid .chips { margin-top: 12px; }.llm-config-panel { margin-bottom: 18px; }.llm-config-panel > label { display: block; margin-top: 13px; }.llm-config-panel textarea { width: 100%; resize: vertical; }.switch-field { display: flex; align-items: center; gap: 10px; }.llm-config-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }.llm-config-footer small, .llm-config-panel label small { color: var(--muted); font-size: 11px; }
+
 .case-notice { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid #31526a; background: #15232a; color: #c7dfe9; border-radius: 6px; margin-bottom: 18px; }
 .case-notice strong { display: block; margin-bottom: 3px; }.case-notice p { margin: 0; line-height: 1.55; font-size: 13px; }
 .case-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }.case-card { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; overflow: hidden; }
@@ -182,6 +184,7 @@ nav button.active::before { content: ''; position: absolute; width: 3px; height:
   .algorithm-intro { align-items: flex-start; flex-direction: column; }.algorithm-row { align-items: flex-start; }.algo-meta { flex-direction: column; gap: 4px; }.switch { margin-left: auto; }
   .user-grid { grid-template-columns: 1fr; }.rule-row { align-items: flex-start; }.rule-meta { flex-direction: column; gap: 5px; }.rule-actions { margin-left: auto; flex-direction: column; }
   .edge-node-grid { grid-template-columns: 1fr; }
+  .admin-role-grid { grid-template-columns: 1fr; }
   .artifact-head-actions { align-items: flex-end; flex-direction: column; gap: 6px; }.form-grid { grid-template-columns: 1fr; }
   .selection-grid, .camera-selection { grid-template-columns: 1fr; }.camera-selection { max-height: 190px; }.selection-group { padding: 10px; }
 }

@@ -813,6 +813,55 @@ class VideoCaseManifest(BaseModel):
     cases: list[VideoCaseRead] = Field(min_length=1, max_length=20)
 
 
+class RoleDefinition(BaseModel):
+    id: str = Field(pattern=r"^(admin|operator|auditor)$")
+    name: str
+    description: str
+    permissions: list[str]
+
+
+class LlmConfigurationUpdate(PatchModel):
+    enabled: bool | None = Field(default=None, strict=True)
+    provider: Literal["openai_compatible", "ollama"] | None = None
+    base_url: str | None = Field(default=None, min_length=8, max_length=300)
+    model: str | None = Field(default=None, min_length=1, max_length=120)
+    api_key_env: str | None = Field(default=None, min_length=3, max_length=100)
+    temperature: float | None = Field(default=None, ge=0, le=2, allow_inf_nan=False)
+    max_tokens: int | None = Field(default=None, ge=64, le=32768, strict=True)
+    system_prompt: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        parts = urlsplit(value)
+        if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+            raise ValueError("base_url must be an HTTP(S) URL without credentials, query, or fragment")
+        return value.rstrip("/")
+
+    @field_validator("api_key_env")
+    @classmethod
+    def validate_api_key_env(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"MINEGUARD_[A-Z0-9_]{2,90}", value):
+            raise ValueError("api_key_env must be a MINEGUARD_ environment variable name")
+        return value
+
+
+class LlmConfigurationRead(BaseModel):
+    enabled: bool
+    provider: Literal["openai_compatible", "ollama"]
+    base_url: str
+    model: str
+    api_key_env: str
+    temperature: float
+    max_tokens: int
+    system_prompt: str
+    api_key_configured: bool
+    updated_at: datetime | None = None
+    concurrency_token: str
+
+
 class SystemCapabilities(BaseModel):
     environment: str
     face_recognition_enabled: bool

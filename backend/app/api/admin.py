@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -17,6 +18,7 @@ from app.models import (
     NotificationDelivery,
     RefreshSession,
     Role,
+    SystemConfiguration,
     User,
 )
 from app.schemas import (
@@ -30,6 +32,9 @@ from app.schemas import (
     UserCreate,
     UserRead,
     UserUpdate,
+    LlmConfigurationRead,
+    LlmConfigurationUpdate,
+    RoleDefinition,
 )
 from app.services.audit import write_audit
 from app.services.concurrency import enforce_if_match
@@ -37,6 +42,22 @@ from app.services.permissions import area_scope
 
 router = APIRouter(tags=["administration"])
 LEGACY_LIST_LIMIT = 1000
+LLM_CONFIGURATION_KEY = "llm"
+DEFAULT_LLM_CONFIGURATION = {
+    "enabled": False,
+    "provider": "openai_compatible",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4.1-mini",
+    "api_key_env": "MINEGUARD_LLM_API_KEY",
+    "temperature": 0.2,
+    "max_tokens": 2048,
+    "system_prompt": "You are a mine safety operations assistant. Return concise, evidence-based Chinese responses.",
+}
+ROLE_CATALOG = (
+    ("admin", "系统管理员", "管理账号、系统配置、模型准入和全局生产数据。", ["system.manage", "users.manage", "models.configure", "audit.read"]),
+    ("operator", "值班员", "按区域处置告警、查看点位与人员授权数据。", ["events.handle", "cameras.read", "rules.read"]),
+    ("auditor", "审计员", "只读查看授权区域的数据、审计记录和治理证据。", ["audit.read", "governance.read", "production.read"]),
+)
 
 
 def reject_oversized_legacy_list(items: list, resource: str) -> list:
@@ -46,6 +67,52 @@ def reject_oversized_legacy_list(items: list, resource: str) -> list:
             detail=f"{resource}数量超过旧版数组接口上限，请使用分页端点",
         )
     return items
+
+
+def llm_configuration_read(record: SystemConfiguration | None) -> LlmConfigurationRead:
+    values = {**DEFAULT_LLM_CONFIGURATION, **(record.value if record else {})}
+    return LlmConfigurationRead(
+        **values,
+        api_key_configured=bool(os.environ.get(values["api_key_env"])),
+        updated_at=record.updated_at if record else None,
+        concurrency_token=record.concurrency_token if record else "unconfigured",
+    )
+
+
+@router.get("/roles", response_model=list[RoleDefinition])
+def list_roles(_: User = Depends(require_roles(Role.ADMIN))) -> list[RoleDefinition]:
+    return [RoleDefinition(id=role, name=name, description=description, permissions=permissions) for role, name, description, permissions in ROLE_CATALOG]
+
+
+@router.get("/llm-configuration", response_model=LlmConfigurationRead)
+def get_llm_configuration(
+    db: Session = Depends(get_db), _: User = Depends(require_roles(Role.ADMIN))
+) -> LlmConfigurationRead:
+    return llm_configuration_read(db.get(SystemConfiguration, LLM_CONFIGURATION_KEY))
+
+
+@router.patch("/llm-configuration", response_model=LlmConfigurationRead)
+def update_llm_configuration(
+    payload: LlmConfigurationUpdate,
+    request: Request,
+    if_match: str | None = Header(default=None, alias="If-Match"),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.ADMIN)),
+) -> LlmConfigurationRead:
+    record = db.get(SystemConfiguration, LLM_CONFIGURATION_KEY)
+    if record is None:
+        if if_match not in {None, '"unconfigured"'}:
+            raise HTTPException(status_code=409, detail="配置已被其他操作更新，请刷新后重新提交")
+        record = SystemConfiguration(key=LLM_CONFIGURATION_KEY, value=DEFAULT_LLM_CONFIGURATION.copy())
+        db.add(record)
+    else:
+        enforce_if_match(record, if_match)
+    changes = payload.model_dump(exclude_unset=True)
+    record.value = {**DEFAULT_LLM_CONFIGURATION, **record.value, **changes}
+    write_audit(db, actor, "llm_configuration.update", "system_configuration", LLM_CONFIGURATION_KEY, {key: value for key, value in changes.items() if key != "system_prompt"}, request)
+    db.commit()
+    db.refresh(record)
+    return llm_configuration_read(record)
 
 
 @router.get("/users", response_model=list[UserRead])

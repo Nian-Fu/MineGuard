@@ -482,3 +482,9 @@ class AuditLog(Base):
     legal_hold: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class SystemConfiguration(TimestampMixin, Base):
+    __tablename__ = "system_configurations"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, default=dict)

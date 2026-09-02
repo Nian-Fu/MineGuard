@@ -54,6 +54,12 @@ export interface VideoCase {
 export interface VideoCaseManifest {
   title: string; generated_at: string; method: string; limitations: string; cases: VideoCase[]
 }
+export interface RoleDefinition { id: string; name: string; description: string; permissions: string[] }
+export interface LlmConfiguration {
+  enabled: boolean; provider: 'openai_compatible' | 'ollama'; base_url: string; model: string; api_key_env: string
+  temperature: number; max_tokens: number; system_prompt: string; api_key_configured: boolean
+  updated_at: string | null; concurrency_token: string
+}
 export interface EdgeModelReport {
   algorithm_type: string; model_version: string; sha256: string; runtime: string; ready: boolean
 }
