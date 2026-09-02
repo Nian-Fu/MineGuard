@@ -220,6 +220,9 @@ class EdgeWorkerConfig:
     resolved_dead_letter_retention_days: int = 90
     heartbeat_seconds: float = 15.0
     stream_stall_timeout_seconds: float = 60.0
+    algorithm_trace_enabled: bool = False
+    algorithm_trace_interval_seconds: float = 30.0
+    algorithm_trace_max_frames: int = 1
     person_classes: tuple[str, ...] = ("person",)
     head_classes: tuple[str, ...] = ("head",)
     helmet_classes: tuple[str, ...] = ("helmet", "hardhat", "hard_hat")
@@ -312,9 +315,23 @@ class EdgeWorkerConfig:
         snapshot_maximum_bytes = bounded_integer(
             "snapshot_maximum_bytes", 8 * 1024 * 1024, 1024, 20 * 1024 * 1024
         )
+        algorithm_trace_max_frames = bounded_integer(
+            "algorithm_trace_max_frames", 1, 1, 20
+        )
         event_snapshots_enabled = payload.get("event_snapshots_enabled", False)
         if not isinstance(event_snapshots_enabled, bool):
             raise ValueError("event_snapshots_enabled must be boolean")
+        algorithm_trace_enabled = payload.get("algorithm_trace_enabled", False)
+        if not isinstance(algorithm_trace_enabled, bool):
+            raise ValueError("algorithm_trace_enabled must be boolean")
+        raw_trace_interval = payload.get("algorithm_trace_interval_seconds", 30)
+        if isinstance(raw_trace_interval, bool) or not isinstance(
+            raw_trace_interval, (int, float)
+        ):
+            raise ValueError("algorithm_trace_interval_seconds must be between 5 and 3600")
+        algorithm_trace_interval_seconds = float(raw_trace_interval)
+        if not isfinite(algorithm_trace_interval_seconds) or not 5 <= algorithm_trace_interval_seconds <= 3600:
+            raise ValueError("algorithm_trace_interval_seconds must be between 5 and 3600")
         required_text_fields = (
             "central_url",
             "node_code",
@@ -428,6 +445,9 @@ class EdgeWorkerConfig:
             cameras=cameras,
             snapshot_spool_path=snapshot_spool_path,
             event_snapshots_enabled=event_snapshots_enabled,
+            algorithm_trace_enabled=algorithm_trace_enabled,
+            algorithm_trace_interval_seconds=algorithm_trace_interval_seconds,
+            algorithm_trace_max_frames=algorithm_trace_max_frames,
             snapshot_jpeg_quality=snapshot_jpeg_quality,
             snapshot_maximum_bytes=snapshot_maximum_bytes,
             outbox_maximum_items=outbox_maximum_items,
@@ -589,6 +609,8 @@ class CameraAnalyzer:
         self.crowding_polygon: list[Point] = []
         self._frame_shape: tuple[int, int] | None = None
         self._crowding_active = False
+        self._last_trace_detections: list[dict[str, Any]] = []
+        self._last_trace_events: list[str] = []
 
     def analyze(
         self,
@@ -643,7 +665,28 @@ class CameraAnalyzer:
                     timestamp, {"count": crowd.count, "track_ids": list(crowd.track_ids)},
                 ))
             self._crowding_active = crowd.exceeded
+        width, height = self._frame_shape
+        self._last_trace_detections = [
+            {
+                "track_id": person.track_id,
+                "class_name": "person",
+                "left": round(min(max(person.box.left / width, 0.0), 1.0), 6),
+                "top": round(min(max(person.box.top / height, 0.0), 1.0), 6),
+                "right": round(min(max(person.box.right / width, 0.0), 1.0), 6),
+                "bottom": round(min(max(person.box.bottom / height, 0.0), 1.0), 6),
+                "confidence": round(min(max(person.confidence, 0.0), 1.0), 6),
+            }
+            for person in people[:100]
+        ]
+        self._last_trace_events = [event["event_type"] for event in events]
         return len(people), events, self._face_probes(people, head_detections)
+
+    def structured_trace_frame(self) -> dict[str, Any]:
+        """Return non-biometric, short-lived debug metadata only."""
+        return {
+            "detections": list(self._last_trace_detections),
+            "events": list(self._last_trace_events),
+        }
 
     def reset(self) -> None:
         reset_tracker = getattr(self.tracker, "reset", None)
@@ -654,6 +697,8 @@ class CameraAnalyzer:
         self.crowding_polygon = []
         self._frame_shape = None
         self._crowding_active = False
+        self._last_trace_detections = []
+        self._last_trace_events = []
 
     def _configure_geometry(self, width: int, height: int) -> None:
         if self._frame_shape == (width, height):
@@ -1024,6 +1069,19 @@ class EdgeApiClient:
                     ) from exc
                 raise
 
+    async def send_algorithm_trace(self, payload: dict[str, Any]) -> None:
+        async with self.client.stream(
+            "POST", "edge/algorithm-traces", json=payload
+        ) as response:
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if response.status_code in {400, 413, 415, 422}:
+                    raise PermanentDeliveryError(
+                        f"trace_rejected_{response.status_code}"
+                    ) from exc
+                raise
+
     async def heartbeat(self, payload: dict[str, Any]) -> None:
         async with self.client.stream(
             "POST", "edge/heartbeat", json=payload
@@ -1107,6 +1165,11 @@ class EdgeWorker:
         self._face_tasks: dict[int, asyncio.Task] = {}
         self._face_last_probe: dict[tuple[int, int], float] = {}
         self._face_last_event: dict[tuple[int, str], float] = {}
+        self._trace_frames: dict[int, list[tuple[float, dict[str, Any]]]] = {
+            camera.camera_id: [] for camera in config.cameras
+        }
+        self._trace_last_sample: dict[int, float] = {}
+        self._trace_tasks: dict[int, asyncio.Task] = {}
         self._stop = asyncio.Event()
 
     async def run(self) -> None:
@@ -1163,11 +1226,17 @@ class EdgeWorker:
                     task.cancel()
             for task in self._face_tasks.values():
                 task.cancel()
+            for task in self._trace_tasks.values():
+                task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             await asyncio.gather(
                 *self._face_tasks.values(), return_exceptions=True
             )
+            await asyncio.gather(
+                *self._trace_tasks.values(), return_exceptions=True
+            )
             self._face_tasks.clear()
+            self._trace_tasks.clear()
             await self.api.close()
             self.gpu.close()
             logger.info("edge_worker_stopped node=%s", self.config.node_code)
@@ -1190,6 +1259,7 @@ class EdgeWorker:
                 timestamp,
                 started,
             )
+            self._capture_algorithm_trace(camera, analyzer, timestamp)
             state.count = count
             state.latency_ms = round((time.monotonic() - started) * 1000)
             state.frame_count += 1
@@ -1299,6 +1369,78 @@ class EdgeWorker:
             on_state,
             ReconnectPolicy(initial_delay_seconds=1, maximum_delay_seconds=30),
         )
+
+    def _capture_algorithm_trace(
+        self,
+        camera: CameraWorkerConfig,
+        analyzer: CameraAnalyzer,
+        timestamp: float,
+    ) -> None:
+        if not self.config.algorithm_trace_enabled:
+            return
+        now = time.monotonic()
+        if (
+            now - self._trace_last_sample.get(camera.camera_id, 0)
+            < self.config.algorithm_trace_interval_seconds
+        ):
+            return
+        self._trace_last_sample[camera.camera_id] = now
+        active = self._trace_tasks.get(camera.camera_id)
+        if active and not active.done():
+            return
+        frames = self._trace_frames[camera.camera_id]
+        frames.append((timestamp, analyzer.structured_trace_frame()))
+        if len(frames) < self.config.algorithm_trace_max_frames:
+            return
+        batch, self._trace_frames[camera.camera_id] = frames[:], []
+        task = asyncio.create_task(self._send_algorithm_trace(camera, batch))
+        self._trace_tasks[camera.camera_id] = task
+        task.add_done_callback(
+            lambda completed, camera_id=camera.camera_id: self._finish_trace_task(
+                camera_id, completed
+            )
+        )
+
+    async def _send_algorithm_trace(
+        self,
+        camera: CameraWorkerConfig,
+        batch: list[tuple[float, dict[str, Any]]],
+    ) -> None:
+        if not batch:
+            return
+        first_timestamp = batch[0][0]
+        payload = {
+            "camera_id": camera.camera_id,
+            "algorithm_type": self.manifest.algorithm_type,
+            "occurred_at": datetime.fromtimestamp(first_timestamp, UTC).isoformat(),
+            "frames": [
+                {
+                    "timestamp": round(max(timestamp - first_timestamp, 0.0), 3),
+                    **frame,
+                }
+                for timestamp, frame in batch
+            ],
+        }
+        try:
+            await self.api.send_algorithm_trace(payload)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "edge_algorithm_trace_dropped node=%s camera=%s error_type=%s",
+                self.config.node_code,
+                camera.code,
+                type(exc).__name__,
+            )
+
+    def _finish_trace_task(self, camera_id: int, task: asyncio.Task) -> None:
+        if self._trace_tasks.get(camera_id) is task:
+            self._trace_tasks.pop(camera_id, None)
+        if not task.cancelled():
+            try:
+                task.exception()
+            except (asyncio.CancelledError, Exception):
+                pass
 
     def _schedule_face_probe(
         self,

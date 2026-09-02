@@ -488,3 +488,14 @@ class SystemConfiguration(TimestampMixin, Base):
     __tablename__ = "system_configurations"
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     value: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class AlgorithmTrace(Base):
+    __tablename__ = "algorithm_traces"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("edge_nodes.id"), index=True)
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id"), index=True)
+    algorithm_type: Mapped[str] = mapped_column(String(50), index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    frames: Mapped[list] = mapped_column(JSON, default=list)

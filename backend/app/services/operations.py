@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     AuditLog,
+    AlgorithmTrace,
     DeliveryStatus,
     Event,
     EventStatus,
@@ -286,4 +287,13 @@ def prune_data_lifecycle(
                 pass
         audit_ids.append(audit.id)
     counts["audit_logs"] = _delete_ids(db, AuditLog, audit_ids)
+    trace_ids = list(
+        db.scalars(
+            select(AlgorithmTrace.id)
+            .where(AlgorithmTrace.expires_at < checked_at)
+            .order_by(AlgorithmTrace.id)
+            .limit(limit)
+        )
+    )
+    counts["algorithm_traces"] = _delete_ids(db, AlgorithmTrace, trace_ids)
     return counts

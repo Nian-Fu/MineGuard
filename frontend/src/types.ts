@@ -41,6 +41,16 @@ export interface ModelArtifact {
   approved_by: number | null; approved_at: string | null; created_at: string; updated_at: string
   concurrency_token: string
 }
+export interface AlgorithmTraceDetection {
+  track_id: number; class_name: 'person'; left: number; top: number; right: number; bottom: number; confidence: number
+}
+export interface AlgorithmTraceFrame {
+  timestamp: number; detections: AlgorithmTraceDetection[]; events: string[]
+}
+export interface AlgorithmTrace {
+  id: number; camera_id: number; algorithm_type: string; occurred_at: string; expires_at: string
+  frames: AlgorithmTraceFrame[]
+}
 export interface VideoCase {
   id: string; title: string; scenario: string; video_file: string; video_path: string
   source_url: string; source_attribution: string; license: string

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Annotated
 
@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import create_service_key
 from app.dependencies import get_current_user, get_edge_node, require_roles
-from app.models import Camera, EdgeNode, EdgeNodeStatus, Event, ModelArtifact, Role, User
+from app.models import AlgorithmTrace, Camera, EdgeNode, EdgeNodeStatus, Event, ModelArtifact, Role, User
 from app.schemas import (
     CameraHeartbeat,
     EdgeEventReceipt,
@@ -20,6 +20,8 @@ from app.schemas import (
     EdgeNodeCredential,
     EdgeNodeRead,
     EdgeNodeUpdate,
+    EdgeAlgorithmTraceCreate,
+    AlgorithmTraceRead,
     EventCreate,
     Page,
     SnapshotUploadGrant,
@@ -41,6 +43,82 @@ from app.services.snapshots import (
 
 router = APIRouter(tags=["edge-nodes"])
 LEGACY_LIST_LIMIT = 1000
+TRACE_RETENTION_DAYS = 7
+TRACE_MAX_AGE_HOURS = 24
+TRACE_MAX_FUTURE_MINUTES = 5
+
+
+@router.post("/edge/algorithm-traces", response_model=AlgorithmTraceRead, status_code=status.HTTP_201_CREATED)
+def ingest_algorithm_trace(payload: EdgeAlgorithmTraceCreate, db: Session = Depends(get_db), node: EdgeNode = Depends(get_edge_node)) -> AlgorithmTraceRead:
+    if payload.camera_id not in node.camera_ids:
+        raise HTTPException(status_code=403, detail="该节点无权上报此摄像头追踪")
+    if not db.get(Camera, payload.camera_id):
+        raise HTTPException(status_code=404, detail="摄像头不存在")
+    occurred_at = payload.occurred_at
+    if occurred_at.tzinfo is None:
+        raise HTTPException(status_code=422, detail="追踪发生时间必须包含时区")
+    occurred_at = occurred_at.astimezone(UTC)
+    now = datetime.now(UTC)
+    if not now - timedelta(hours=TRACE_MAX_AGE_HOURS) <= occurred_at <= now + timedelta(minutes=TRACE_MAX_FUTURE_MINUTES):
+        raise HTTPException(status_code=422, detail="追踪发生时间超出允许时钟偏差")
+    trace = AlgorithmTrace(
+        node_id=node.id,
+        camera_id=payload.camera_id,
+        algorithm_type=payload.algorithm_type,
+        occurred_at=occurred_at,
+        expires_at=now + timedelta(days=TRACE_RETENTION_DAYS),
+        frames=[frame.model_dump(mode="json") for frame in payload.frames],
+    )
+    db.add(trace); db.commit(); db.refresh(trace)
+    return AlgorithmTraceRead.model_validate(trace)
+
+
+@router.get("/algorithm-traces", response_model=Page)
+def list_algorithm_traces(
+    request: Request,
+    page: int = 1,
+    page_size: int = 20,
+    camera_id: int | None = None,
+    algorithm_type: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Page:
+    scope = area_scope(user)
+    stmt = select(AlgorithmTrace).join(Camera).where(AlgorithmTrace.expires_at > datetime.now(UTC))
+    count = select(func.count()).select_from(AlgorithmTrace).join(Camera).where(AlgorithmTrace.expires_at > datetime.now(UTC))
+    if camera_id is not None:
+        if camera_id < 1:
+            raise HTTPException(status_code=422, detail="摄像头编号无效")
+        stmt, count = stmt.where(AlgorithmTrace.camera_id == camera_id), count.where(AlgorithmTrace.camera_id == camera_id)
+    if algorithm_type is not None:
+        normalized_algorithm_type = algorithm_type.strip()
+        if not normalized_algorithm_type or len(normalized_algorithm_type) > 50 or not normalized_algorithm_type.replace("_", "").replace(".", "").replace("-", "").isalnum():
+            raise HTTPException(status_code=422, detail="算法类型无效")
+        stmt, count = stmt.where(AlgorithmTrace.algorithm_type == normalized_algorithm_type), count.where(AlgorithmTrace.algorithm_type == normalized_algorithm_type)
+    if scope is not None:
+        stmt, count = stmt.where(Camera.area.in_(scope)), count.where(Camera.area.in_(scope))
+    safe_page, safe_size = max(page, 1), min(max(page_size, 1), 50)
+    rows = db.scalars(stmt.order_by(AlgorithmTrace.occurred_at.desc()).offset((safe_page - 1) * safe_size).limit(safe_size)).all()
+    total = db.scalar(count) or 0
+    write_audit(
+        db,
+        user,
+        "algorithm_trace.read",
+        "algorithm_trace",
+        detail={
+            "camera_id": camera_id,
+            "algorithm_type": algorithm_type,
+            "returned": len(rows),
+        },
+        request=request,
+    )
+    db.commit()
+    return Page(
+        items=[AlgorithmTraceRead.model_validate(row) for row in rows],
+        total=total,
+        page=safe_page,
+        page_size=safe_size,
+    )
 
 
 def edge_node_for_scope(

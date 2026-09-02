@@ -510,6 +510,69 @@ class AlgorithmUpdate(PatchModel):
         return validate_json_size(value, max_bytes=32 * 1024, field_name="config")
 
 
+class AlgorithmTraceDetection(BaseModel):
+    track_id: int = Field(ge=1, le=2**31 - 1, strict=True)
+    class_name: Literal["person"]
+    left: float = Field(ge=0, le=1, strict=True, allow_inf_nan=False)
+    top: float = Field(ge=0, le=1, strict=True, allow_inf_nan=False)
+    right: float = Field(ge=0, le=1, strict=True, allow_inf_nan=False)
+    bottom: float = Field(ge=0, le=1, strict=True, allow_inf_nan=False)
+    confidence: float = Field(ge=0, le=1, strict=True, allow_inf_nan=False)
+
+    _validate_coordinates = field_validator(
+        "left", "top", "right", "bottom", "confidence", mode="before"
+    )(strict_finite_float)
+
+    @model_validator(mode="after")
+    def validate_box(self):
+        if self.left >= self.right or self.top >= self.bottom:
+            raise ValueError("detection coordinates must form a non-empty box")
+        return self
+
+
+class AlgorithmTraceFrame(BaseModel):
+    timestamp: float = Field(ge=0, le=86_400, strict=True, allow_inf_nan=False)
+    detections: list[AlgorithmTraceDetection] = Field(default_factory=list, max_length=100)
+    events: list[str] = Field(default_factory=list, max_length=20)
+
+    _validate_timestamp = field_validator("timestamp", mode="before")(strict_finite_float)
+
+    @field_validator("events")
+    @classmethod
+    def validate_events(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)) or any(
+            not re.fullmatch(r"[a-z0-9_.-]{2,50}", item) for item in value
+        ):
+            raise ValueError("events must contain unique rule identifiers")
+        return value
+
+
+class EdgeAlgorithmTraceCreate(BaseModel):
+    camera_id: int = Field(ge=1, strict=True)
+    algorithm_type: str = Field(pattern=r"^[a-z0-9_.-]{2,50}$")
+    occurred_at: datetime
+    frames: list[AlgorithmTraceFrame] = Field(min_length=1, max_length=20)
+
+    @field_validator("frames")
+    @classmethod
+    def validate_trace_frames(cls, value: list[AlgorithmTraceFrame]) -> list[AlgorithmTraceFrame]:
+        validate_json_size(
+            [item.model_dump(mode="json") for item in value],
+            max_bytes=64 * 1024,
+            field_name="frames",
+        )
+        return value
+
+
+class AlgorithmTraceRead(ORMModel):
+    id: int
+    camera_id: int
+    algorithm_type: str
+    occurred_at: datetime
+    expires_at: datetime
+    frames: list[AlgorithmTraceFrame]
+
+
 class ModelArtifactCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     algorithm_type: str = Field(min_length=2, max_length=50, pattern=r"^[a-z0-9_.-]+$")

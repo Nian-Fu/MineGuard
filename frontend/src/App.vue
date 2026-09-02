@@ -10,7 +10,7 @@ import {
 import { api, apiEndpoint, clearAccessToken, refreshAccessToken, setAccessToken } from './api'
 import CameraFeed from './components/CameraFeed.vue'
 import { clearRealtimeCursor, createRealtimeClient } from './realtime'
-import type { AlertRule, Algorithm, AuthenticationMethods, AuditLog, Camera, DashboardSummary, EdgeNode, EventItem, FaceTemplate, LlmConfiguration, ModelArtifact, NotificationDelivery, PageResponse, Person, RoleDefinition, User, VideoCaseManifest } from './types'
+import type { AlertRule, Algorithm, AlgorithmTrace, AuthenticationMethods, AuditLog, Camera, DashboardSummary, EdgeNode, EventItem, FaceTemplate, LlmConfiguration, ModelArtifact, NotificationDelivery, PageResponse, Person, RoleDefinition, User, VideoCaseManifest } from './types'
 
 type View = 'dashboard' | 'cameras' | 'events' | 'persons' | 'algorithms' | 'video-cases' | 'rules' | 'administration' | 'system'
 type Modal = 'camera' | 'camera-edit' | 'person' | 'person-edit' | 'person-status' | 'event-snapshot' | 'event-hold' | 'face-hold' | 'rule' | 'user' | 'user-access' | 'face' | 'password' | 'reset-password' | 'edge' | 'artifact' | 'artifact-approval' | null
@@ -81,6 +81,10 @@ const persons = ref<Person[]>([])
 const faceTemplates = ref<FaceTemplate[]>([])
 const algorithms = ref<Algorithm[]>([])
 const selectedAlgorithmId = ref<number | null>(null)
+const algorithmTraces = ref<AlgorithmTrace[]>([])
+const selectedAlgorithmTraceId = ref<number | null>(null)
+const selectedAlgorithmTraceFrameIndex = ref(0)
+const algorithmTraceCameraFilter = ref<number | null>(null)
 const videoCaseManifest = ref<VideoCaseManifest | null>(null)
 const roleDefinitions = ref<RoleDefinition[]>([])
 const llmConfiguration = ref<LlmConfiguration | null>(null)
@@ -176,6 +180,7 @@ let alertRuleRequestGeneration = 0
 let modelArtifactRequestGeneration = 0
 let userRequestGeneration = 0
 let edgeNodeRequestGeneration = 0
+let algorithmTraceRequestGeneration = 0
 let searchReloadTimer: number | null = null
 const realtimeClient = createRealtimeClient(scheduleRealtimeRefresh)
 
@@ -228,6 +233,8 @@ const cameraAlgorithmOptions = computed(() => [...new Set([
   ...cameraForm.value.enabled_algorithms,
 ])])
 const selectedAlgorithm = computed(() => algorithms.value.find(item => item.id === selectedAlgorithmId.value) || algorithms.value[0] || null)
+const selectedAlgorithmTrace = computed(() => algorithmTraces.value.find(item => item.id === selectedAlgorithmTraceId.value) || algorithmTraces.value[0] || null)
+const selectedTraceFrame = computed(() => selectedAlgorithmTrace.value?.frames[selectedAlgorithmTraceFrameIndex.value] || null)
 const algorithmGuide = computed(() => {
   const algorithm = selectedAlgorithm.value
   if (!algorithm) return null
@@ -617,6 +624,24 @@ async function loadModelArtifactPage() {
   modelArtifactTotal.value = data.total
 }
 
+async function loadAlgorithmTraces() {
+  const generation = ++algorithmTraceRequestGeneration
+  const { data } = await api.get<PageResponse<AlgorithmTrace>>('/algorithm-traces', {
+    params: {
+      page: 1,
+      page_size: 20,
+      algorithm_type: selectedAlgorithm.value?.algorithm_type || undefined,
+      camera_id: algorithmTraceCameraFilter.value || undefined,
+    },
+  })
+  if (generation !== algorithmTraceRequestGeneration) return
+  algorithmTraces.value = data.items
+  if (!data.items.some(item => item.id === selectedAlgorithmTraceId.value)) {
+    selectedAlgorithmTraceId.value = data.items[0]?.id || null
+    selectedAlgorithmTraceFrameIndex.value = 0
+  }
+}
+
 async function loadUserPage() {
   const generation = ++userRequestGeneration
   const { data } = await api.get<PageResponse<User>>('/users/page', {
@@ -708,7 +733,7 @@ async function loadAll() {
       api.get('/dashboard/summary'), api.get('/algorithms'), api.get('/system/capabilities'),
       api.get('/video-cases'),
       loadCameraPage(), loadOverviewCameras(), loadEventPage(), loadPersonPage(), loadDeliveryPage(),
-      loadAlertRulePage(), loadModelArtifactPage(), loadEdgeNodePage(),
+      loadAlertRulePage(), loadModelArtifactPage(), loadAlgorithmTraces(), loadEdgeNodePage(),
     ])
     summary.value = s.data; algorithms.value = a.data
     capabilities.value = cap.data
@@ -1417,6 +1442,9 @@ watch(eventStatusFilter, () => {
   eventPage.value = 1
   if (activeView.value === 'events') void loadEventPage()
 })
+watch([selectedAlgorithmId, algorithmTraceCameraFilter], () => {
+  if (user.value && activeView.value === 'algorithms') void loadAlgorithmTraces()
+})
 onMounted(async () => {
   window.addEventListener('mineguard:unauthorized', clearSession); window.addEventListener('resize', resizeCharts)
   window.addEventListener('mineguard:reconnecting', markReconnecting)
@@ -1598,6 +1626,14 @@ onBeforeUnmount(() => {
             <div class="debug-flow"><div v-for="(stage, index) in algorithmGuide.stages" :key="stage"><b>{{ index + 1 }}</b><span>{{ stage }}</span></div></div>
             <div class="debug-columns"><div><h3>当前生效配置</h3><pre>{{ JSON.stringify(selectedAlgorithm.config, null, 2) }}</pre></div><div><h3>模型制品与接入状态</h3><ul><li v-for="artifact in modelArtifacts.filter(item => item.algorithm_type === selectedAlgorithm.algorithm_type)" :key="artifact.id"><strong>{{ artifact.name }} · {{ artifact.model_version }}</strong><span>{{ artifact.approved ? '已准入' : '未准入' }} · {{ artifact.runtime }} · {{ artifact.sha256.slice(0, 12) }}</span></li><li v-if="!modelArtifacts.some(item => item.algorithm_type === selectedAlgorithm.algorithm_type)">尚未登记对应模型制品</li></ul><ul><li v-for="node in edgeNodes" :key="node.id"><strong>{{ node.name }}</strong><span>{{ node.status }} · 上报模型 {{ (node.telemetry.models || []).filter(item => item.algorithm_type === selectedAlgorithm.algorithm_type).length }} 个</span></li><li v-if="!edgeNodes.length">尚未有边缘节点上报运行状态</li></ul></div></div>
             <div class="debug-notes"><strong>功能边界</strong><span v-for="note in algorithmGuide.notes" :key="note">{{ note }}</span></div>
+          </section>
+          <section class="algorithm-trace-panel">
+            <header class="panel-head"><div><h2>结构化逐帧追踪</h2><span>区域授权 · 7 天留存 · 无原始画面</span></div><div class="trace-filters"><select v-model.number="algorithmTraceCameraFilter" aria-label="筛选摄像头"><option :value="null">全部摄像头</option><option v-for="camera in cameras" :key="camera.id" :value="camera.id">{{ camera.code }}</option></select><button class="icon-button compact" title="刷新追踪记录" @click="loadAlgorithmTraces"><RefreshCw :size="16" /></button></div></header>
+            <div v-if="selectedAlgorithmTrace && selectedTraceFrame" class="trace-layout">
+              <div class="trace-records"><button v-for="trace in algorithmTraces" :key="trace.id" :class="['trace-record', { selected: trace.id === selectedAlgorithmTrace.id }]" @click="selectedAlgorithmTraceId = trace.id; selectedAlgorithmTraceFrameIndex = 0"><strong>摄像头 #{{ trace.camera_id }}</strong><span>{{ formatTime(trace.occurred_at) }}</span><small>{{ trace.frames.length }} 帧 · {{ trace.algorithm_type }}</small></button></div>
+              <div class="trace-replay"><div class="trace-stage" aria-label="结构化追踪画布"><div v-for="detection in selectedTraceFrame.detections" :key="detection.track_id" class="trace-box" :style="{ left: `${detection.left * 100}%`, top: `${detection.top * 100}%`, width: `${(detection.right - detection.left) * 100}%`, height: `${(detection.bottom - detection.top) * 100}%` }"><span>#{{ detection.track_id }} {{ (detection.confidence * 100).toFixed(0) }}%</span></div><span v-if="!selectedTraceFrame.detections.length" class="trace-empty">本帧无人员目标</span></div><div class="trace-frame-tabs"><button v-for="(_, index) in selectedAlgorithmTrace.frames" :key="index" :class="{ active: index === selectedAlgorithmTraceFrameIndex }" @click="selectedAlgorithmTraceFrameIndex = index">{{ selectedAlgorithmTrace.frames[index].timestamp.toFixed(1) }}s</button></div><div class="trace-hit-list"><span>规则命中</span><b v-for="eventType in selectedTraceFrame.events" :key="eventType">{{ typeLabels[eventType] || eventType }}</b><em v-if="!selectedTraceFrame.events.length">无</em></div></div>
+            </div>
+            <div v-else class="empty-state">当前权限范围内暂无结构化追踪记录</div>
           </section>
           <section class="table-panel artifact-registry">
             <div class="panel-head"><div><h2>生产模型制品库</h2><span>只有摘要一致且审批通过的制品可由边缘节点加载</span></div><div class="artifact-head-actions"><span class="count-label">本页 {{ modelArtifacts.filter(item => item.approved).length }} 个已准入 · 共 {{ modelArtifactTotal }} 个</span><button v-if="user.role === 'admin'" class="primary" @click="openArtifactCreation"><Plus :size="16" />登记制品</button></div></div>
