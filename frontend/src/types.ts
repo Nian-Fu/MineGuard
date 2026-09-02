@@ -41,6 +41,19 @@ export interface ModelArtifact {
   approved_by: number | null; approved_at: string | null; created_at: string; updated_at: string
   concurrency_token: string
 }
+export interface VideoCase {
+  id: string; title: string; scenario: string; video_file: string; video_path: string
+  source_url: string; source_attribution: string; license: string
+  metrics: {
+    decoded_frames: number; analyzed_frames: number; frame_sampling_interval: number; source_fps: number
+    frames_with_people: number; detection_coverage: number; detected_people: number; rule_events: Record<string, number>
+    latency_ms_mean: number; latency_ms_p50: number; latency_ms_p95: number; effective_analysis_fps: number
+  }
+  samples: Array<{ frame: number; timestamp_seconds: number; people: number; events: string[] }>
+}
+export interface VideoCaseManifest {
+  title: string; generated_at: string; method: string; limitations: string; cases: VideoCase[]
+}
 export interface EdgeModelReport {
   algorithm_type: string; model_version: string; sha256: string; runtime: string; ready: boolean
 }

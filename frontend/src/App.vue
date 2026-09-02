@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import {
-  Activity, AlertTriangle, Bell, BrainCircuit, Check, ChevronLeft, ChevronRight,
+  Activity, AlertTriangle, Bell, BookOpen, BrainCircuit, Check, ChevronLeft, ChevronRight,
   CircleUserRound, Clock3, Cpu, Database, DoorOpen, Eye, Gauge, HardHat, KeyRound, LayoutDashboard,
   ListChecks, LoaderCircle, Lock, LogOut, Menu, PackageCheck, Pencil, Plus, Power, RefreshCw, ScanFace,
   ScrollText, Search, Settings, ShieldCheck, Siren, Upload, UserCog, UsersRound, Video, Wifi,
@@ -11,9 +11,9 @@ import {
 import { api, apiEndpoint, clearAccessToken, refreshAccessToken, setAccessToken } from './api'
 import CameraFeed from './components/CameraFeed.vue'
 import { clearRealtimeCursor, createRealtimeClient } from './realtime'
-import type { AlertRule, Algorithm, AuthenticationMethods, AuditLog, Camera, DashboardSummary, EdgeNode, EventItem, FaceTemplate, ModelArtifact, NotificationDelivery, PageResponse, Person, User } from './types'
+import type { AlertRule, Algorithm, AuthenticationMethods, AuditLog, Camera, DashboardSummary, EdgeNode, EventItem, FaceTemplate, ModelArtifact, NotificationDelivery, PageResponse, Person, User, VideoCaseManifest } from './types'
 
-type View = 'dashboard' | 'cameras' | 'events' | 'persons' | 'algorithms' | 'rules' | 'administration' | 'system'
+type View = 'dashboard' | 'cameras' | 'events' | 'persons' | 'algorithms' | 'video-cases' | 'rules' | 'administration' | 'system'
 type Modal = 'camera' | 'camera-edit' | 'person' | 'person-edit' | 'person-status' | 'event-snapshot' | 'event-hold' | 'face-hold' | 'rule' | 'user' | 'user-access' | 'face' | 'password' | 'reset-password' | 'edge' | 'artifact' | 'artifact-approval' | null
 type NotificationChannelId = 'console' | 'sms' | 'broadcast' | 'webhook'
 const pendingLogoutKey = 'mineguard_pending_logout'
@@ -81,6 +81,7 @@ const events = ref<EventItem[]>([])
 const persons = ref<Person[]>([])
 const faceTemplates = ref<FaceTemplate[]>([])
 const algorithms = ref<Algorithm[]>([])
+const videoCaseManifest = ref<VideoCaseManifest | null>(null)
 const modelArtifacts = ref<ModelArtifact[]>([])
 const alertRules = ref<AlertRule[]>([])
 const auditLogs = ref<AuditLog[]>([])
@@ -178,6 +179,7 @@ const navItems = computed(() => [
   { id: 'events' as View, label: '事件中心', icon: Siren },
   { id: 'persons' as View, label: '人员库', icon: UsersRound },
   { id: 'algorithms' as View, label: '算法中心', icon: BrainCircuit },
+  { id: 'video-cases' as View, label: '真实案例', icon: BookOpen },
   { id: 'rules' as View, label: '告警规则', icon: ListChecks },
   ...(user.value?.role === 'admin' || user.value?.role === 'auditor' ? [{ id: 'administration' as View, label: '管理与审计', icon: ScrollText }] : []),
   { id: 'system' as View, label: '系统状态', icon: Settings },
@@ -185,7 +187,7 @@ const navItems = computed(() => [
 const titles: Record<View, [string, string]> = {
   dashboard: ['生产总览', '实时掌握矿井视频智能分析态势'], cameras: ['监控点位', '设备状态与算法能力编排'],
   events: ['事件中心', '告警研判、确认与闭环处置'], persons: ['人员库', '人员身份与区域授权管理'],
-  algorithms: ['算法中心', '模型版本、阈值与部署状态'], system: ['系统状态', '服务健康与运行资源概览'],
+  algorithms: ['算法中心', '模型版本、阈值与部署状态'], 'video-cases': ['真实案例', '离线真实视频的算法基准记录'], system: ['系统状态', '服务健康与运行资源概览'],
   rules: ['告警规则', '事件分级、通知通道与抑制策略'], administration: ['管理与审计', '账号权限和操作记录追溯'],
 }
 const filteredEvents = computed(() => events.value.filter((event) => {
@@ -367,6 +369,7 @@ function clearSession() {
   persons.value = []
   faceTemplates.value = []
   algorithms.value = []
+  videoCaseManifest.value = null
   modelArtifacts.value = []
   alertRules.value = []
   auditLogs.value = []
@@ -681,13 +684,15 @@ async function loadAll() {
   fullReloadPending = false
   loading.value = true; globalError.value = ''
   try {
-    const [s, a, cap] = await Promise.all([
+    const [s, a, cap, videoCases] = await Promise.all([
       api.get('/dashboard/summary'), api.get('/algorithms'), api.get('/system/capabilities'),
+      api.get('/video-cases'),
       loadCameraPage(), loadOverviewCameras(), loadEventPage(), loadPersonPage(), loadDeliveryPage(),
       loadAlertRulePage(), loadModelArtifactPage(), loadEdgeNodePage(),
     ])
     summary.value = s.data; algorithms.value = a.data
     capabilities.value = cap.data
+    videoCaseManifest.value = videoCases.data
     if (user.value?.role === 'admin') await loadUserPage()
     else {
       users.value = []
@@ -1535,6 +1540,22 @@ onBeforeUnmount(() => {
               <tbody><tr v-for="artifact in modelArtifacts" :key="artifact.id"><td><strong>{{ artifact.name }}</strong><small>{{ artifact.algorithm_type }} · {{ artifact.model_version }}</small></td><td><strong>{{ artifact.runtime }}</strong><small>{{ artifact.license_id }}</small></td><td><strong class="repository-cell">{{ artifact.source_repository }}</strong><small>commit {{ artifact.source_commit.slice(0, 12) }}</small></td><td><code class="hash-cell" :title="artifact.sha256">{{ artifact.sha256.slice(0, 12) }}…</code></td><td><small class="metrics-cell">{{ Object.keys(artifact.metrics).length ? Object.entries(artifact.metrics).map(([key, value]) => `${key}=${value}`).join(' · ') : '未填报' }}</small></td><td><span :class="['status-pill', artifact.approved ? 'approved' : 'pending']">{{ artifact.approved ? '已准入' : '待审批' }}</span><small v-if="artifact.approved_at">{{ formatTime(artifact.approved_at) }}</small></td><td><div v-if="user.role === 'admin'" class="row-actions"><button v-if="!artifact.approved" title="审批准入" @click="openArtifactApproval(artifact, true)"><PackageCheck :size="16" /></button><button v-else title="撤销准入" @click="openArtifactApproval(artifact, false)"><X :size="16" /></button></div><span v-else>--</span></td></tr></tbody>
             </table><div v-if="!modelArtifacts.length" class="empty-state">尚未登记模型制品</div><nav v-if="modelArtifactTotal > pageSize" class="pager" aria-label="模型制品分页"><button title="上一页" :disabled="modelArtifactPage <= 1" @click="changePage('model-artifacts', modelArtifactPage - 1)"><ChevronLeft :size="16" /></button><span>第 {{ modelArtifactPage }} / {{ totalPages(modelArtifactTotal) }} 页 · 共 {{ modelArtifactTotal }} 个</span><button title="下一页" :disabled="modelArtifactPage >= totalPages(modelArtifactTotal)" @click="changePage('model-artifacts', modelArtifactPage + 1)"><ChevronRight :size="16" /></button></nav>
           </section>
+        </template>
+
+        <template v-else-if="activeView === 'video-cases'">
+          <section class="case-notice"><BookOpen :size="20" /><div><strong>{{ videoCaseManifest?.title || '离线真实视频案例基准' }}</strong><p>{{ videoCaseManifest?.limitations }}</p></div></section>
+          <section class="case-grid">
+            <article v-for="item in videoCaseManifest?.cases || []" :key="item.id" class="case-card">
+              <video controls preload="metadata" :src="item.video_path" :aria-label="item.title" />
+              <div class="case-card-body">
+                <header><div><small>{{ item.scenario }}</small><h2>{{ item.title }}</h2></div><span class="status-pill approved">已基准</span></header>
+                <div class="case-metrics"><div><span>分析帧</span><strong>{{ item.metrics.analyzed_frames }}</strong><small>/ {{ item.metrics.decoded_frames }}</small></div><div><span>检出覆盖</span><strong>{{ (item.metrics.detection_coverage * 100).toFixed(1) }}%</strong><small>{{ item.metrics.frames_with_people }} 帧</small></div><div><span>P50 / P95</span><strong>{{ item.metrics.latency_ms_p50 }} / {{ item.metrics.latency_ms_p95 }} ms</strong><small>均值 {{ item.metrics.latency_ms_mean }} ms</small></div><div><span>分析吞吐</span><strong>{{ item.metrics.effective_analysis_fps }} FPS</strong><small>每 {{ item.metrics.frame_sampling_interval }} 帧取样</small></div></div>
+                <div class="case-events"><span>规则命中</span><b v-for="(count, name) in item.metrics.rule_events" :key="name">{{ typeLabels[name] || name }} {{ count }}</b><em v-if="!Object.keys(item.metrics.rule_events).length">未观察到规则命中</em></div>
+                <footer><a :href="item.source_url" target="_blank" rel="noreferrer">Wikimedia Commons 来源</a><span>{{ item.license }} · {{ item.source_attribution }}</span></footer>
+              </div>
+            </article>
+          </section>
+          <section class="case-method"><strong>执行方法</strong><span>{{ videoCaseManifest?.method }}</span><small>生成时间：{{ videoCaseManifest ? formatTime(videoCaseManifest.generated_at) : '--' }}</small></section>
         </template>
 
         <template v-else-if="activeView === 'rules'">

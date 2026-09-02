@@ -1,0 +1,317 @@
+{
+  "title": "Offline real-video case benchmark",
+  "generated_at": "2026-09-02T01:54:20.481248+00:00",
+  "method": "OpenCV HOG people detector + deterministic IoU tracking + MineGuard intrusion/crowding rules",
+  "limitations": "No manual ground-truth annotations are included. Detection coverage and rule counts are operational observations, not precision, recall, or a production acceptance result.",
+  "cases": [
+    {
+      "id": "velenje-chairlift-exit",
+      "title": "Velenje Coal Mine - Chairlift Exit",
+      "scenario": "underground personnel passage",
+      "video_file": "velenje-chairlift-exit-480p.webm",
+      "source_url": "https://commons.wikimedia.org/wiki/File:The_Velenje_Coal_Mine,_Mine_chairlift,_exit.webm",
+      "source_attribution": "Sounds of Changes, via Wikimedia Commons",
+      "license": "CC BY 3.0",
+      "video_path": "/cases/velenje-chairlift-exit-480p.webm",
+      "metrics": {
+        "decoded_frames": 979,
+        "analyzed_frames": 40,
+        "frame_sampling_interval": 25,
+        "source_fps": 50.0,
+        "frames_with_people": 18,
+        "detection_coverage": 0.45,
+        "detected_people": 23,
+        "rule_events": {
+          "crowding": 1
+        },
+        "latency_ms_mean": 16.85,
+        "latency_ms_p50": 15.26,
+        "latency_ms_p95": 19.98,
+        "effective_analysis_fps": 36.79
+      },
+      "samples": [
+        {
+          "frame": 50,
+          "timestamp_seconds": 1.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 75,
+          "timestamp_seconds": 1.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 225,
+          "timestamp_seconds": 4.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 275,
+          "timestamp_seconds": 5.5,
+          "people": 2,
+          "events": []
+        },
+        {
+          "frame": 325,
+          "timestamp_seconds": 6.5,
+          "people": 3,
+          "events": [
+            "crowding"
+          ]
+        },
+        {
+          "frame": 350,
+          "timestamp_seconds": 7.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 375,
+          "timestamp_seconds": 7.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 625,
+          "timestamp_seconds": 12.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 650,
+          "timestamp_seconds": 13.0,
+          "people": 2,
+          "events": []
+        },
+        {
+          "frame": 675,
+          "timestamp_seconds": 13.5,
+          "people": 2,
+          "events": []
+        },
+        {
+          "frame": 700,
+          "timestamp_seconds": 14.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 725,
+          "timestamp_seconds": 14.5,
+          "people": 1,
+          "events": []
+        }
+      ]
+    },
+    {
+      "id": "velenje-chairlift-start",
+      "title": "Velenje Coal Mine - Chairlift Start",
+      "scenario": "underground personnel transport",
+      "video_file": "velenje-chairlift-start-480p.webm",
+      "source_url": "https://commons.wikimedia.org/wiki/File:The_Velenje_Coal_Mine,_Mine_chairlift,_starting_of_chairlift.webm",
+      "source_attribution": "Sounds of Changes, via Wikimedia Commons",
+      "license": "CC BY 3.0",
+      "video_path": "/cases/velenje-chairlift-start-480p.webm",
+      "metrics": {
+        "decoded_frames": 918,
+        "analyzed_frames": 37,
+        "frame_sampling_interval": 25,
+        "source_fps": 50.0,
+        "frames_with_people": 28,
+        "detection_coverage": 0.7568,
+        "detected_people": 28,
+        "rule_events": {
+          "intrusion": 2
+        },
+        "latency_ms_mean": 16.45,
+        "latency_ms_p50": 16.49,
+        "latency_ms_p95": 19.54,
+        "effective_analysis_fps": 37.96
+      },
+      "samples": [
+        {
+          "frame": 25,
+          "timestamp_seconds": 0.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 125,
+          "timestamp_seconds": 2.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 150,
+          "timestamp_seconds": 3.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 200,
+          "timestamp_seconds": 4.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 225,
+          "timestamp_seconds": 4.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 250,
+          "timestamp_seconds": 5.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 300,
+          "timestamp_seconds": 6.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 325,
+          "timestamp_seconds": 6.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 350,
+          "timestamp_seconds": 7.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 375,
+          "timestamp_seconds": 7.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 400,
+          "timestamp_seconds": 8.0,
+          "people": 1,
+          "events": [
+            "intrusion"
+          ]
+        },
+        {
+          "frame": 425,
+          "timestamp_seconds": 8.5,
+          "people": 1,
+          "events": []
+        }
+      ]
+    },
+    {
+      "id": "velenje-mine-locomotive",
+      "title": "Velenje Coal Mine - Mine Locomotive Ride",
+      "scenario": "underground auxiliary transport",
+      "video_file": "velenje-mine-locomotive-480p.webm",
+      "source_url": "https://commons.wikimedia.org/wiki/File:The_Velenje_Coal_Mine,_Ride_with_mine_locomotive.webm",
+      "source_attribution": "Sounds of Changes, via Wikimedia Commons",
+      "license": "CC BY 3.0",
+      "video_path": "/cases/velenje-mine-locomotive-480p.webm",
+      "metrics": {
+        "decoded_frames": 1492,
+        "analyzed_frames": 60,
+        "frame_sampling_interval": 25,
+        "source_fps": 50.0,
+        "frames_with_people": 31,
+        "detection_coverage": 0.5167,
+        "detected_people": 42,
+        "rule_events": {
+          "crowding": 2,
+          "intrusion": 2
+        },
+        "latency_ms_mean": 16.11,
+        "latency_ms_p50": 15.76,
+        "latency_ms_p95": 19.74,
+        "effective_analysis_fps": 37.63
+      },
+      "samples": [
+        {
+          "frame": 225,
+          "timestamp_seconds": 4.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 575,
+          "timestamp_seconds": 11.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 600,
+          "timestamp_seconds": 12.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 675,
+          "timestamp_seconds": 13.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 700,
+          "timestamp_seconds": 14.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 725,
+          "timestamp_seconds": 14.5,
+          "people": 4,
+          "events": [
+            "crowding"
+          ]
+        },
+        {
+          "frame": 750,
+          "timestamp_seconds": 15.0,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 775,
+          "timestamp_seconds": 15.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 825,
+          "timestamp_seconds": 16.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 850,
+          "timestamp_seconds": 17.0,
+          "people": 3,
+          "events": [
+            "crowding"
+          ]
+        },
+        {
+          "frame": 875,
+          "timestamp_seconds": 17.5,
+          "people": 1,
+          "events": []
+        },
+        {
+          "frame": 900,
+          "timestamp_seconds": 18.0,
+          "people": 1,
+          "events": []
+        }
+      ]
+    }
+  ]
+}

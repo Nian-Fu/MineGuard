@@ -770,6 +770,49 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class VideoCaseMetrics(BaseModel):
+    decoded_frames: int = Field(ge=0)
+    analyzed_frames: int = Field(ge=0)
+    frame_sampling_interval: int = Field(ge=1)
+    source_fps: float = Field(ge=0, allow_inf_nan=False)
+    frames_with_people: int = Field(ge=0)
+    detection_coverage: float = Field(ge=0, le=1, allow_inf_nan=False)
+    detected_people: int = Field(ge=0)
+    rule_events: dict[str, int] = Field(default_factory=dict)
+    latency_ms_mean: float = Field(ge=0, allow_inf_nan=False)
+    latency_ms_p50: float = Field(ge=0, allow_inf_nan=False)
+    latency_ms_p95: float = Field(ge=0, allow_inf_nan=False)
+    effective_analysis_fps: float = Field(ge=0, allow_inf_nan=False)
+
+
+class VideoCaseSample(BaseModel):
+    frame: int = Field(ge=0)
+    timestamp_seconds: float = Field(ge=0, allow_inf_nan=False)
+    people: int = Field(ge=0)
+    events: list[str] = Field(default_factory=list)
+
+
+class VideoCaseRead(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9-]{2,80}$")
+    title: str = Field(min_length=2, max_length=200)
+    scenario: str = Field(min_length=2, max_length=200)
+    video_file: str = Field(pattern=r"^[a-z0-9-]+-480p\.webm$")
+    video_path: str = Field(pattern=r"^/cases/[a-z0-9-]+-480p\.webm$")
+    source_url: str = Field(min_length=10, max_length=500)
+    source_attribution: str = Field(min_length=2, max_length=200)
+    license: str = Field(min_length=2, max_length=50)
+    metrics: VideoCaseMetrics
+    samples: list[VideoCaseSample] = Field(default_factory=list, max_length=20)
+
+
+class VideoCaseManifest(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    generated_at: datetime
+    method: str = Field(min_length=2, max_length=500)
+    limitations: str = Field(min_length=2, max_length=1000)
+    cases: list[VideoCaseRead] = Field(min_length=1, max_length=20)
+
+
 class SystemCapabilities(BaseModel):
     environment: str
     face_recognition_enabled: bool

@@ -12,7 +12,7 @@ from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutEr
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
-from app.api import admin, algorithms, auth, cameras, dashboard, edge, events, faces, media, persons, realtime, system
+from app.api import admin, algorithms, auth, cameras, dashboard, edge, events, faces, media, persons, realtime, system, video_cases
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine, get_db
 from app.schemas import HealthResponse
@@ -113,7 +113,7 @@ async def operational_headers(request: Request, call_next):
     return response
 
 
-for router in [auth.router, dashboard.router, cameras.router, events.router, realtime.router, edge.router, persons.router, faces.router, media.router, algorithms.router, admin.router, system.router]:
+for router in [auth.router, dashboard.router, cameras.router, events.router, realtime.router, edge.router, persons.router, faces.router, media.router, algorithms.router, video_cases.router, admin.router, system.router]:
     app.include_router(router, prefix=settings.api_prefix)
 
 
