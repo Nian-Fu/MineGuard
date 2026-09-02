@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import {
-  Activity, AlertTriangle, Bell, BookOpen, BrainCircuit, Check, ChevronLeft, ChevronRight,
+  Activity, AlertTriangle, Bell, BookOpen, BrainCircuit, Check, ChevronLeft, ChevronRight, GitBranch,
   CircleUserRound, Clock3, Cpu, Database, DoorOpen, Eye, Gauge, HardHat, KeyRound, LayoutDashboard,
   ListChecks, LoaderCircle, Lock, LogOut, Menu, PackageCheck, Pencil, Plus, Power, RefreshCw, ScanFace,
   ScrollText, Search, Settings, ShieldCheck, Siren, Upload, UserCog, UsersRound, Video, Wifi,
@@ -81,6 +81,7 @@ const events = ref<EventItem[]>([])
 const persons = ref<Person[]>([])
 const faceTemplates = ref<FaceTemplate[]>([])
 const algorithms = ref<Algorithm[]>([])
+const selectedAlgorithmId = ref<number | null>(null)
 const videoCaseManifest = ref<VideoCaseManifest | null>(null)
 const roleDefinitions = ref<RoleDefinition[]>([])
 const llmConfiguration = ref<LlmConfiguration | null>(null)
@@ -224,6 +225,18 @@ const cameraAlgorithmOptions = computed(() => [...new Set([
   ...algorithms.value.map(algorithm => algorithm.algorithm_type),
   ...cameraForm.value.enabled_algorithms,
 ])])
+const selectedAlgorithm = computed(() => algorithms.value.find(item => item.id === selectedAlgorithmId.value) || algorithms.value[0] || null)
+const algorithmGuide = computed(() => {
+  const algorithm = selectedAlgorithm.value
+  if (!algorithm) return null
+  const guides: Record<string, { summary: string; input: string; output: string; stages: string[]; notes: string[] }> = {
+    object_detection: { summary: '从视频帧中定位人员、头部与安全帽候选框，并向规则层提交置信度和坐标。', input: '边缘节点解码后的 RGB 视频帧', output: '目标框、类别、置信度', stages: ['RTSP / HLS 帧解码', '尺度归一化与张量转换', 'Triton 目标检测推理', '置信度阈值过滤', '人员/头部/安全帽结果输出'], notes: ['阈值控制候选框过滤，不等同于人工标注精度。', '模型制品 SHA-256 必须与准入记录一致。'] },
+    tracking: { summary: '为连续帧中的人员目标分配稳定轨迹，再将轨迹送入电子围栏、驻留和人数规则。', input: '人员检测框与时间戳', output: '轨迹 ID、位置、驻留时间、区域人数', stages: ['接收人员检测框', 'ByteTrack 关联', '轨迹生命周期维护', '电子围栏与驻留计算', '入侵/聚集事件判定'], notes: ['轨迹丢失或视频重连会重置关联状态。', '区域多摄像头人数以指定计数权威点位为准。'] },
+    face_recognition: { summary: '在人脸授权和质量条件满足时，由受控 Provider 返回匹配结果，原始图像不在控制平台持久化。', input: '关联到人员轨迹的人脸裁剪', output: '匹配/未知状态、相似度、质量、活体结果', stages: ['人员轨迹关联', '人脸候选裁剪', '质量与活体检查', '加密模板匹配', '区域授权判断与事件输出'], notes: ['该流程需要独立启用的人脸 Provider 和加密模板密钥。', '低质量、多脸或活体失败会拒绝生成匹配。'] },
+    rl_scheduler: { summary: '在安全约束下为推理资源分配任务，当前影子运行不会直接改变生产告警路径。', input: '队列、GPU、风险等级与约束状态', output: '建议优先级和调度决策', stages: ['收集节点遥测', '构建调度状态', '安全约束过滤', '策略决策', '影子结果记录'], notes: ['影子运行结果用于评估，不能替代已批准的生产策略。', '严重告警的最低采样频率受硬约束保护。'] },
+  }
+  return guides[algorithm.algorithm_type] || { summary: '该算法使用已登记的配置和模型制品执行受控处理。', input: '由边缘节点提供的受控输入', output: '算法配置定义的结构化结果', stages: ['输入校验', '模型或规则执行', '阈值判断', '结果上报'], notes: ['请结合下方 JSON 配置与模型制品记录审查。'] }
+})
 
 function concurrencyConfig(resource: { concurrency_token: string }) {
   return { headers: { 'If-Match': `"${resource.concurrency_token}"` } }
@@ -1564,9 +1577,16 @@ onBeforeUnmount(() => {
             <article v-for="algorithm in algorithms" :key="algorithm.id" class="algorithm-row">
               <div class="algo-icon"><Cpu v-if="algorithm.algorithm_type !== 'face_recognition'" :size="22" /><CircleUserRound v-else :size="22" /></div>
               <div class="algo-main"><div><h3>{{ algorithm.name }}</h3><span :class="['status-pill', algorithm.deployment_status]">{{ statusLabels[algorithm.deployment_status] || algorithm.deployment_status }}</span></div><p>{{ algorithm.algorithm_type }} · {{ algorithm.model_version }}</p><div class="algo-meta"><label class="algo-threshold">判定阈值 <input type="range" min="0" max="1" step="0.01" :value="algorithm.threshold" :disabled="user.role !== 'admin'" @change="updateAlgorithmThreshold(algorithm, $event)" /><strong>{{ algorithm.threshold.toFixed(2) }}</strong></label><span>更新于 {{ formatTime(algorithm.updated_at) }}</span></div></div>
-              <label v-if="user.role === 'admin'" class="switch" :title="algorithm.enabled ? '停用算法' : '启用算法'"><input type="checkbox" :checked="algorithm.enabled" @change="toggleAlgorithm(algorithm)" /><span /></label>
+              <button class="icon-button compact" title="查看算法过程与接入诊断" @click="selectedAlgorithmId = algorithm.id"><GitBranch :size="16" /></button><label v-if="user.role === 'admin'" class="switch" :title="algorithm.enabled ? '停用算法' : '启用算法'"><input type="checkbox" :checked="algorithm.enabled" @change="toggleAlgorithm(algorithm)" /><span /></label>
               <span v-else :class="['status-pill', algorithm.enabled ? 'online' : 'offline']">{{ algorithm.enabled ? '已启用' : '已停用' }}</span>
             </article>
+          </section>
+          <section v-if="selectedAlgorithm && algorithmGuide" class="algorithm-debug-panel">
+            <header><div><small>算法过程与接入诊断</small><h2>{{ selectedAlgorithm.name }}</h2><p>{{ algorithmGuide.summary }}</p></div><span :class="['status-pill', selectedAlgorithm.deployment_status]">{{ statusLabels[selectedAlgorithm.deployment_status] || selectedAlgorithm.deployment_status }}</span></header>
+            <div class="debug-io"><div><span>输入</span><strong>{{ algorithmGuide.input }}</strong></div><div><span>输出</span><strong>{{ algorithmGuide.output }}</strong></div><div><span>当前阈值</span><strong>{{ selectedAlgorithm.threshold.toFixed(2) }}</strong></div><div><span>模型版本</span><strong>{{ selectedAlgorithm.model_version }}</strong></div></div>
+            <div class="debug-flow"><div v-for="(stage, index) in algorithmGuide.stages" :key="stage"><b>{{ index + 1 }}</b><span>{{ stage }}</span></div></div>
+            <div class="debug-columns"><div><h3>当前生效配置</h3><pre>{{ JSON.stringify(selectedAlgorithm.config, null, 2) }}</pre></div><div><h3>模型制品与接入状态</h3><ul><li v-for="artifact in modelArtifacts.filter(item => item.algorithm_type === selectedAlgorithm.algorithm_type)" :key="artifact.id"><strong>{{ artifact.name }} · {{ artifact.model_version }}</strong><span>{{ artifact.approved ? '已准入' : '未准入' }} · {{ artifact.runtime }} · {{ artifact.sha256.slice(0, 12) }}</span></li><li v-if="!modelArtifacts.some(item => item.algorithm_type === selectedAlgorithm.algorithm_type)">尚未登记对应模型制品</li></ul><ul><li v-for="node in edgeNodes" :key="node.id"><strong>{{ node.name }}</strong><span>{{ node.status }} · 上报模型 {{ (node.telemetry.models || []).filter(item => item.algorithm_type === selectedAlgorithm.algorithm_type).length }} 个</span></li><li v-if="!edgeNodes.length">尚未有边缘节点上报运行状态</li></ul></div></div>
+            <div class="debug-notes"><strong>功能边界</strong><span v-for="note in algorithmGuide.notes" :key="note">{{ note }}</span></div>
           </section>
           <section class="table-panel artifact-registry">
             <div class="panel-head"><div><h2>生产模型制品库</h2><span>只有摘要一致且审批通过的制品可由边缘节点加载</span></div><div class="artifact-head-actions"><span class="count-label">本页 {{ modelArtifacts.filter(item => item.approved).length }} 个已准入 · 共 {{ modelArtifactTotal }} 个</span><button v-if="user.role === 'admin'" class="primary" @click="openArtifactCreation"><Plus :size="16" />登记制品</button></div></div>
