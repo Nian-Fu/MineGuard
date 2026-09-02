@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
 import {
   Activity, AlertTriangle, Bell, BookOpen, BrainCircuit, Check, ChevronLeft, ChevronRight, GitBranch,
   CircleUserRound, Clock3, Cpu, Database, DoorOpen, Eye, Gauge, HardHat, KeyRound, LayoutDashboard,
@@ -147,8 +146,9 @@ const artifactForm = ref({ name: '', algorithm_type: 'object_detection', model_v
 const artifactMetricsJson = ref('{}')
 const selectedArtifact = ref<ModelArtifact | null>(null)
 const artifactApproval = ref({ approved: true, reason: '' })
-let trendChart: echarts.ECharts | null = null
-let severityChart: echarts.ECharts | null = null
+let charting: typeof import('echarts') | null = null
+let trendChart: { dispose: () => void; setOption: (option: unknown) => void; resize: () => void } | null = null
+let severityChart: { dispose: () => void; setOption: (option: unknown) => void; resize: () => void } | null = null
 let liveRefreshTimer: number | null = null
 let realtimeRefreshTimer: number | null = null
 let mediaSessionTimer: number | null = null
@@ -1340,10 +1340,11 @@ async function selectView(view: View) {
 async function renderCharts() {
   await nextTick()
   if (!summary.value) return
+  charting ||= await import('echarts')
   const trendEl = document.getElementById('trend-chart')
   const severityEl = document.getElementById('severity-chart')
   if (trendEl) {
-    trendChart?.dispose(); trendChart = echarts.init(trendEl)
+    trendChart?.dispose(); trendChart = charting.init(trendEl)
     trendChart.setOption({
       grid: { left: 30, right: 14, top: 18, bottom: 24 }, tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: summary.value.hourly_trend.map(x => x.time), axisLine: { lineStyle: { color: '#45504b' } }, axisLabel: { color: '#87918c', interval: 1 } },
@@ -1352,7 +1353,7 @@ async function renderCharts() {
     })
   }
   if (severityEl) {
-    severityChart?.dispose(); severityChart = echarts.init(severityEl)
+    severityChart?.dispose(); severityChart = charting.init(severityEl)
     const colors: Record<string, string> = { critical: '#f05252', high: '#ff9f43', medium: '#faca15', low: '#4ca3ff' }
     severityChart.setOption({
       tooltip: { trigger: 'item' }, legend: { bottom: 0, textStyle: { color: '#a7b0ac' } },
