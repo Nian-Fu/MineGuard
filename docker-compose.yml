@@ -233,7 +233,7 @@ services:
       - api
       - media-gateway
     ports:
-      - "127.0.0.1:8080:80"
+      - "0.0.0.0:38082:80"
     networks:
       - control
       - media
