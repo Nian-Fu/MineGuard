@@ -114,6 +114,8 @@ const userTotal = ref(0)
 const edgeNodePage = ref(1)
 const edgeNodeTotal = ref(0)
 const eventStatusFilter = ref('')
+const auditActionFilter = ref('')
+const auditResourceFilter = ref('')
 const search = ref('')
 const modal = ref<Modal>(null)
 const cameraForm = ref({ code: '', name: '', area: '', stream_url: '', enabled_algorithms: ['intrusion'] })
@@ -554,7 +556,7 @@ async function loadDeliveryPage() {
 async function loadAuditPage() {
   const generation = ++auditRequestGeneration
   const { data } = await api.get<PageResponse<AuditLog>>('/audit-logs', {
-    params: { page: auditPage.value, page_size: pageSize },
+    params: { page: auditPage.value, page_size: pageSize, action: auditActionFilter.value || undefined, resource_type: auditResourceFilter.value || undefined },
   })
   if (generation !== auditRequestGeneration) return
   const lastPage = totalPages(data.total)
@@ -1057,6 +1059,14 @@ async function saveLlmConfiguration() {
   } finally {
     savingLlmConfiguration.value = false
   }
+}
+
+function exportAuditLogs() {
+  const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
+  const rows = [['时间', '操作者', '操作', '资源', '资源 ID', '来源 IP', '详情'], ...auditLogs.value.map(log => [formatTime(log.created_at), log.user_id || 'system', log.action, log.resource_type, log.resource_id || '', log.ip_address || '', JSON.stringify(log.detail)])]
+  const blob = new Blob([`\uFEFF${rows.map(row => row.map(quote).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob); const link = document.createElement('a')
+  link.href = url; link.download = `mineguard-audit-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url)
 }
 
 async function revokeFaceTemplate(template: FaceTemplate) {
@@ -1642,7 +1652,7 @@ onBeforeUnmount(() => {
             <div class="form-grid"><label class="switch-field">启用模型服务<label class="switch"><input v-model="llmConfiguration.enabled" type="checkbox" /><span /></label></label><label>提供方<select v-model="llmConfiguration.provider"><option value="openai_compatible">OpenAI 兼容接口</option><option value="ollama">Ollama</option></select></label><label>服务地址<input v-model="llmConfiguration.base_url" type="url" required /></label><label>模型名称<input v-model="llmConfiguration.model" required /></label><label>密钥环境变量<input v-model="llmConfiguration.api_key_env" pattern="MINEGUARD_[A-Z0-9_]+" required /><small>{{ llmConfiguration.api_key_configured ? '当前运行环境已检测到密钥' : '当前运行环境未检测到此密钥' }}</small></label><label>温度<input v-model.number="llmConfiguration.temperature" type="number" min="0" max="2" step="0.1" required /></label><label>最大输出 Token<input v-model.number="llmConfiguration.max_tokens" type="number" min="64" max="32768" step="64" required /></label></div>
             <label>系统提示词<textarea v-model="llmConfiguration.system_prompt" rows="3" maxlength="4000" /></label><div class="llm-config-footer"><small>最后更新：{{ formatTime(llmConfiguration.updated_at) }}</small><button class="primary" :disabled="savingLlmConfiguration" @click="saveLlmConfiguration"><Check :size="16" />{{ savingLlmConfiguration ? '保存中' : '保存配置' }}</button></div>
           </section>
-          <section class="table-panel audit-table"><table><thead><tr><th>时间</th><th>操作者 ID</th><th>操作</th><th>资源</th><th>资源 ID</th><th>来源 IP</th><th>详情</th></tr></thead>
+          <section class="table-panel audit-table"><div class="panel-head"><div><h2>审计日志</h2><span>按操作和资源筛选，可导出当前页记录</span></div><button class="secondary" title="导出当前页审计日志" @click="exportAuditLogs"><Upload :size="16" />导出 CSV</button></div><div class="audit-filters"><input v-model="auditActionFilter" maxlength="100" placeholder="操作，如 user.update" @change="auditPage = 1; loadAuditPage()" /><input v-model="auditResourceFilter" maxlength="50" placeholder="资源，如 user" @change="auditPage = 1; loadAuditPage()" /><button class="icon-button compact" title="清除日志筛选" @click="auditActionFilter = ''; auditResourceFilter = ''; auditPage = 1; loadAuditPage()"><X :size="16" /></button></div><table><thead><tr><th>时间</th><th>操作者 ID</th><th>操作</th><th>资源</th><th>资源 ID</th><th>来源 IP</th><th>详情</th></tr></thead>
             <tbody><tr v-for="log in auditLogs" :key="log.id"><td>{{ formatTime(log.created_at) }}</td><td>{{ log.user_id || 'system' }}</td><td><strong>{{ log.action }}</strong><small v-if="log.legal_hold">法律保留</small></td><td>{{ log.resource_type }}</td><td>{{ log.resource_id || '--' }}</td><td>{{ log.ip_address || '--' }}</td><td><small class="audit-detail">{{ JSON.stringify(log.detail) }}</small></td></tr></tbody>
           </table><div v-if="!auditLogs.length" class="empty-state">暂无审计记录</div><nav v-if="auditTotal > pageSize" class="pager" aria-label="审计日志分页"><button title="上一页" :disabled="auditPage <= 1" @click="changePage('audit', auditPage - 1)"><ChevronLeft :size="16" /></button><span>第 {{ auditPage }} / {{ totalPages(auditTotal) }} 页 · 共 {{ auditTotal }} 条</span><button title="下一页" :disabled="auditPage >= totalPages(auditTotal)" @click="changePage('audit', auditPage + 1)"><ChevronRight :size="16" /></button></nav></section>
         </template>
